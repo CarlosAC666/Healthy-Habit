@@ -104,6 +104,66 @@ void main() {
     }
   });
 
+  test('acepta mayúsculas y acentos en las respuestas del flujo GET', () {
+    for (final sexo in ['HOMBRE', 'Mujer', 'MASCULINO', 'FEMENINO']) {
+      final service = NutriCalculatorService();
+      service.procesarMensaje('GET');
+
+      expect(service.procesarMensaje('SÍ'), contains('dime tu sexo'));
+      expect(
+        service.procesarMensaje(sexo),
+        contains('¿Cuál es tu peso?'),
+        reason: 'Debe aceptar la opción de sexo "$sexo".',
+      );
+    }
+
+    for (final actividad in [
+      'MUY SEDENTARIA',
+      'Sedentario',
+      'MODERADA',
+      'Activa',
+    ]) {
+      final service = NutriCalculatorService();
+      service.procesarMensaje('GET');
+      service.procesarMensaje('Sí');
+      service.procesarMensaje('Hombre');
+      service.procesarMensaje('70 kg');
+      service.procesarMensaje('170 cm');
+      service.procesarMensaje('25 años');
+
+      expect(
+        service.procesarMensaje(actividad),
+        contains('Tu Gasto Energético Total (GET)'),
+        reason: 'Debe aceptar el nivel de actividad "$actividad".',
+      );
+    }
+  });
+
+  test('acepta variantes con mayúsculas y acentos en la distribución GET', () {
+    for (final distribucion in [
+      'BALANCEADA',
+      'Estándar',
+      'BAJA EN CARBOHIDRATOS',
+      'ALTA EN PROTEÍNAS',
+    ]) {
+      final service = NutriCalculatorService();
+      service.procesarMensaje('GET');
+      service.procesarMensaje('sí');
+      service.procesarMensaje('MASCULINO');
+      service.procesarMensaje('70');
+      service.procesarMensaje('1.70');
+      service.procesarMensaje('25');
+      service.procesarMensaje('MODERADA');
+      service.procesarMensaje('SÍ');
+
+      expect(
+        service.procesarMensaje(distribucion),
+        contains('Distribución ('),
+        reason: 'Debe aceptar la distribución "$distribucion".',
+      );
+    }
+  });
+
   void configureTestView(WidgetTester tester) {
     tester.view.physicalSize = const Size(1200, 1000);
     tester.view.devicePixelRatio = 1;
@@ -122,8 +182,7 @@ void main() {
     await tester.pumpWidget(const NutriApp());
     expect(find.byTooltip('Recordatorio de agua'), findsNothing);
 
-    await tester.tap(find.text('Calcular mi IMC'));
-    await tester.pump(const Duration(milliseconds: 500));
+    await sendMessage(tester, 'Calcular mi IMC');
     expect(find.textContaining('¿Quieres calcular tu IMC?'), findsOneWidget);
 
     await sendMessage(tester, 'sí');
@@ -134,69 +193,64 @@ void main() {
     expect(find.textContaining('Tu IMC es 22.5'), findsOneWidget);
   });
 
-  testWidgets('calcula y muestra el GET', (WidgetTester tester) async {
+  testWidgets('GET queda fuera de las cuatro opciones rápidas',
+      (WidgetTester tester) async {
     configureTestView(tester);
     await tester.pumpWidget(const NutriApp());
 
-    await tester.tap(find.text('Calcular mi GET'));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.textContaining('¿Quieres calcular el tuyo?'), findsOneWidget);
+    await sendMessage(tester, 'Calcular mi GET');
+    expect(
+      find.textContaining('no puedo responder esa pregunta por el momento'),
+      findsOneWidget,
+    );
+  });
 
-    await sendMessage(tester, 'sí');
-    expect(find.textContaining('dime tu sexo'), findsOneWidget);
-    await sendMessage(tester, 'hombre');
-    await sendMessage(tester, '70');
-    await sendMessage(tester, '1.70');
-    await sendMessage(tester, '25');
-    await sendMessage(tester, '1');
-    await sendMessage(tester, 'no');
+  testWidgets('solo responde las cuatro opciones rápidas',
+      (WidgetTester tester) async {
+    configureTestView(tester);
+    await tester.pumpWidget(const NutriApp());
+
+    await sendMessage(tester, '¿Cuál es la capital de Francia?');
+    expect(
+      find.textContaining('no puedo responder esa pregunta por el momento'),
+      findsOneWidget,
+    );
+
+    for (final question in ['¿Qué son los desafíos?', 'Calcular mi GET']) {
+      await sendMessage(tester, question);
+      final replies = tester
+          .widgetList<MessageBubble>(find.byType(MessageBubble))
+          .where((bubble) => !bubble.message.isUser)
+          .toList();
+      expect(
+        replies.last.message.text,
+        contains('no puedo responder esa pregunta por el momento'),
+      );
+    }
+
+    expect(find.text('¿Cuánta agua debo tomar al día?'), findsOneWidget);
+    expect(
+      find.text('¿Es mejor comer antes o después de entrenar?'),
+      findsOneWidget,
+    );
+    expect(
+        find.text('Ideas de snacks saludables para la tarde'), findsOneWidget);
+    expect(find.text('Calcular mi IMC'), findsOneWidget);
+
+    await tester.tap(find.text('¿Cuánta agua debo tomar al día?'));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Tu Gasto Energético Total (GET)'),
-      findsOneWidget,
-    );
-  });
+    expect(find.textContaining('Multiplica tu peso corporal'), findsOneWidget);
 
-  testWidgets('responde con apoyo cuando el usuario no puede con un desafío',
-      (WidgetTester tester) async {
-    configureTestView(tester);
-    await tester.pumpWidget(const NutriApp());
-
-    await sendMessage(tester, 'no puedo con el desafío');
-
-    expect(
-      find.textContaining('Te sugiero ir a ajustes'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('metas temporales'), findsNothing);
-  });
-
-  testWidgets('explica qué son los desafíos', (WidgetTester tester) async {
-    configureTestView(tester);
-    await tester.pumpWidget(const NutriApp());
-
-    await sendMessage(tester, '¿Qué son los desafíos?');
-
-    expect(
-      find.textContaining('Los desafíos son metas temporales'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('experiencia (XP) adicional'), findsOneWidget);
-  });
-
-  testWidgets(
-      'prioriza la respuesta de comidas pesadas antes de entrenar',
-      (WidgetTester tester) async {
-    configureTestView(tester);
-    await tester.pumpWidget(const NutriApp());
-
-    await sendMessage(tester, 'comer antes de entrenar');
-
-    expect(find.textContaining('Evita comidas pesadas'), findsOneWidget);
-    expect(find.textContaining('Depende de la duración'), findsNothing);
-
-    await sendMessage(tester, '¿Es mejor comer antes o después de entrenar?');
-
+    await tester.tap(find.text('¿Es mejor comer antes o después de entrenar?'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Depende de la duración'), findsOneWidget);
+
+    await tester.tap(find.text('Ideas de snacks saludables para la tarde'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('fruta fresca, yogur natural'), findsOneWidget);
+
+    await tester.tap(find.text('Calcular mi IMC'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('¿Quieres calcular tu IMC?'), findsOneWidget);
   });
 }
