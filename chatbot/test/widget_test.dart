@@ -205,6 +205,41 @@ void main() {
     );
   });
 
+  testWidgets('varía respuestas fuera de tema y muestra las cuatro opciones',
+      (WidgetTester tester) async {
+    configureTestView(tester);
+    await tester.pumpWidget(const NutriApp());
+
+    final responses = <String>{};
+    const suggestions = [
+      '¿Cuánta agua debo tomar al día?',
+      '¿Es mejor comer antes o después de entrenar?',
+      'Ideas de snacks saludables para la tarde',
+      'Calcular mi IMC',
+    ];
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      await sendMessage(tester, '¿Cuál es la capital de Francia?');
+      final latestResponse = tester
+          .widgetList<MessageBubble>(find.byType(MessageBubble))
+          .where((bubble) => !bubble.message.isUser)
+          .last
+          .message
+          .text;
+
+      expect(
+        latestResponse,
+        contains('no puedo responder esa pregunta por el momento'),
+      );
+      for (final suggestion in suggestions) {
+        expect(latestResponse, contains(suggestion));
+      }
+      responses.add(latestResponse);
+    }
+
+    expect(responses.length, greaterThan(1));
+  });
+
   testWidgets('solo responde las cuatro opciones rápidas',
       (WidgetTester tester) async {
     configureTestView(tester);

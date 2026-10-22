@@ -1,6 +1,6 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'nutri_calculator_service.dart';
-import 'dart:math';
 
 void main() {
   runApp(const NutriApp());
@@ -29,7 +29,7 @@ class NutriApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mr. Healthy - Asistente de Nutrición', //Cambiar lo de "title"
+      title: 'Mr. Healthy - Asistente de Nutrición', //Cambiar lo de "title"|
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -104,7 +104,20 @@ class _NutriChatPageState extends State<NutriChatPage> {
     });
 
     scrollToBottom();
-    final respuesta = _calculatorService.procesarMensaje(text);
+
+    final normalizedText = _normalizeText(text);
+    final isActiveCalculatorFlow =
+        _calculatorService.pasoIMC > 0 || _calculatorService.pasoGET > 0;
+    final isQuickOption = quickOptions.any(
+      (option) => _normalizeText(option) == normalizedText,
+    );
+    final isImcIntent = _containsAny(
+      normalizedText,
+      ['imc', 'indice de masa corporal'],
+    );
+    final respuesta = (isActiveCalculatorFlow || isImcIntent || isQuickOption)
+        ? _calculatorService.procesarMensaje(text)
+        : '';
     final response = respuesta.isNotEmpty ? respuesta : getNutriResponse(text);
     Future.delayed(const Duration(milliseconds: 450), () {
       if (!mounted) return;
@@ -135,7 +148,14 @@ class _NutriChatPageState extends State<NutriChatPage> {
   // Servicio para cálculos de nutrición (IMC y GET)
 
   String getNutriResponse(String input) {
-    final text = input.toLowerCase();
+    final text = _normalizeText(input);
+    final isQuickOption = quickOptions.any(
+      (option) => _normalizeText(option) == text,
+    );
+    if (!isQuickOption) {
+      return _getOutOfScopeResponse();
+    }
+
     const List<String> consejosHabitos = [
       '1. Bebe un vaso de agua al despertar y mantén una botella a la mano durante el día.',
       '2. Añade una porción de verdura o fruta a cada comida.',
@@ -1032,9 +1052,24 @@ class _NutriChatPageState extends State<NutriChatPage> {
           'tienes otra duda, aquí estoy.';
     }
 
-    return 'Lo siento, no puedo responder esa pregunta por el momento. '
-        'Puedes elegir una de las cuatro opciones que aparecen debajo '
-        'del chat para recibir ayuda.';
+    return _getOutOfScopeResponse();
+  }
+
+  String _getOutOfScopeResponse() {
+    const responses = [
+      '¡Uy, me sacaste de mi tema! Por ahora, no puedo responder esa pregunta '
+          'por el momento, pero sí puedo ayudarte con algo de bienestar.',
+      '¡Buena pregunta! La verdad, no puedo responder esa pregunta por el '
+          'momento porque me especializo en nutrición y hábitos saludables.',
+      'Esa pregunta se sale un poquito de mi especialidad: no puedo responder '
+          'esa pregunta por el momento. ¡Pero podemos hablar de salud!',
+      'Todavía no tengo información para eso; no puedo responder esa pregunta '
+          'por el momento. ¿Probamos con alguno de estos temas?',
+    ];
+    final response = responses[Random().nextInt(responses.length)];
+    final options = quickOptions.map((option) => '• $option').join('\n');
+
+    return '$response\n\nPuedes preguntarme sobre:\n$options';
   }
 
   bool _containsAny(String text, List<String> keywords) {
